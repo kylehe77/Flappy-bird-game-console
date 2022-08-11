@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<LOG_ROOT>
+	<PROJECT NAME="Team4">
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|altpll0:inst|altpll:altpll_component" CBX_FILE_NAME="altpll0_altpll.v"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|background:Display_background|background_rom:background_game|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_qlb1.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|bouncy_ball:Ball|Flappybird_rom:bird_colour|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_2o91.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|bouncy_ball:Ball|char_rom_4s:textlevel|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_q5a1.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|gameover_screen:Display_gameover_screen|char_rom:scoretext|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_kt91.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|Menu_Screen:Display_menu_screen|char_rom:info|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_kt91.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|bouncy_ball:Ball|char_rom:textlives|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_kt91.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|Menu_Screen:Display_menu_screen|char_rom:text|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_kt91.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|bouncy_ball:Ball|char_rom:textscore|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_kt91.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|gameover_screen:Display_gameover_screen|char_rom:gameovertext|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_kt91.tdf"/>
+		<CBX_INST_ENTRY INSTANCE_NAME="|Main|controller:inst8|gameover_screen:Display_gameover_screen|char_rom:mainmenutext|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_kt91.tdf"/>
+	</PROJECT>
+</LOG_ROOT>

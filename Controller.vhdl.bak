@@ -1,0 +1,127 @@
+LIBRARY IEEE;
+USE IEEE.STD_LOGIC_1164.all;
+USE  IEEE.STD_LOGIC_ARITH.all;
+USE  IEEE.STD_LOGIC_SIGNED.all;
+
+entity controller IS
+	port(
+		 SIGNAL pb1, pb2, clk, vert_sync	: IN std_logic;
+		 SIGNAL reset, pause					: IN std_logic;
+		 SIGNAL pixel_row, pixel_column	: IN std_logic_vector(9 DOWNTO 0);
+		 SIGNAL selected_mode            : IN std_logic_vector(1 downto 0);
+		 SIGNAL game_over						: OUT std_logic;
+		 SIGNAL red, green, blue			: OUT STD_LOGIC_VECTOR(3 downto 0)
+		 );		
+end controller;
+
+architecture behaviour of controller is
+
+component bouncy_ball is
+	port(
+		SIGNAL pb1, pb2, clk, vert_sync	      		: IN std_logic;
+		SIGNAL reset, pause    			      		: IN std_logic;
+		SIGNAL pixel_row, pixel_column	      		: IN std_logic_vector(9 DOWNTO 0);
+		SIGNAL selected_mode                 			: IN std_logic_vector(1 downto 0);
+		SIGNAL score_hundreds_out, score_tens_out, score_ones_out	: OUT std_logic_vector(5 downto 0);
+		SIGNAL game_over										: OUT std_logic := '0';
+		SIGNAL text_on, ball_on, pipe_on 				: OUT std_logic;
+		SIGNAL ball_colour									: OUT std_logic_vector(11 downto 0)
+		);
+end component bouncy_ball;
+
+component Menu_Screen is
+	port(
+		SIGNAL clk						    	: IN std_logic;
+		SIGNAL pixel_row, pixel_column	: IN std_logic_vector(9 DOWNTO 0);
+		SIGNAL menu_text_on   		 		: OUT std_logic_vector(11 downto 0)	
+		);
+end component Menu_Screen;
+
+component gameover_screen is
+	port(
+		SIGNAL clk						      : IN std_logic;
+		SIGNAL pixel_row, pixel_column	: IN std_logic_vector(9 DOWNTO 0);
+		SIGNAL score_hundreds, score_tens, score_ones 	: IN std_logic_vector(5 downto 0);
+		SIGNAL over_text_on				 	: OUT std_logic_vector(11 downto 0)	
+		);
+end component gameover_screen;
+
+component background is
+	port(
+		clk 							: IN std_logic;
+		pixel_row, pixel_column : IN std_logic_vector(9 downto 0);
+		rom_mux_output 			: OUT std_logic_vector(11 downto 0)
+	);
+end component background;
+
+
+signal text_on, ball_on, pipe_on 					: std_logic;
+signal menu_text_on 	   								: std_logic_vector(11 downto 0);
+signal over_text_on 	   								: std_logic_vector(11 downto 0);
+signal player_game_over									: std_logic;
+signal score_hundreds_out, score_tens_out, score_ones_out	: std_logic_vector(5 downto 0);
+signal background_screen_on 							: std_logic_vector(11 downto 0);
+signal ball_colour										: std_logic_vector(11 downto 0);
+
+begin
+
+Ball: bouncy_ball port map (pb1, pb2, clk, vert_sync, reset, pause, pixel_row, pixel_column, selected_mode,
+							score_hundreds_out, score_tens_out, score_ones_out, player_game_over, text_on, ball_on, pipe_on, ball_colour);
+
+Display_menu_screen : Menu_Screen port map (clk, pixel_row, pixel_column, menu_text_on);
+
+Display_gameover_screen : gameover_screen port map (clk, pixel_row, pixel_column, score_hundreds_out, 
+										score_tens_out, score_ones_out, over_text_on);
+
+Display_background : background port map (clk, pixel_row, pixel_column, background_screen_on);
+
+select_mode: process (selected_mode, menu_text_on, ball_on, text_on, pipe_on, background_screen_on, over_text_on, ball_colour, player_game_over)
+
+begin
+
+	if (selected_mode = "00") then
+		if (menu_text_on = "111111111111") then
+			Red   <=  menu_text_on(11 downto 8);
+			Green <=  menu_text_on(7 downto 4);
+			Blue  <=  menu_text_on(3 downto 0);	
+		else
+			Red 	<= background_screen_on(11 downto 8);
+			Green <= background_screen_on(7 downto 4);
+			Blue	<= background_screen_on(3 downto 0);	
+		end if;
+	elsif (selected_mode = "11") then
+		if (over_text_on = "111111111111") then
+			Red   <=  over_text_on(11 downto 8);
+			Green <=  over_text_on(7 downto 4);
+			Blue  <=  over_text_on(3 downto 0);
+		else
+			Red 	<= "1111";					-- red background
+			Green <= "0000";
+			Blue	<= "0000";
+		end if;
+	else
+		-- Colours for pixel data on video signal
+		-- Ball, Background, Text, Pipes
+		if (ball_on = '1') then
+			Red   <=  ball_colour(11 downto 8);
+			Green <=  ball_colour(7 downto 4);
+			Blue  <=  ball_colour(3 downto 0);	
+		elsif (text_on = '1') then			-- white color text
+			Red 	<=  "1111";
+			Green <=  "1111";
+			Blue 	<=  "1111";
+		elsif (pipe_on = '1') then
+			Red 	<=  "0000";					-- green pipes
+			Green <=  "1111";
+			Blue 	<=  "0000";
+		else
+			Red 	<= background_screen_on(11 downto 8);
+			Green <= background_screen_on(7 downto 4);
+			Blue	<= background_screen_on(3 downto 0);	
+		end if;
+			game_over <= player_game_over;
+	end if;
+	
+end process select_mode;
+
+end architecture behaviour;

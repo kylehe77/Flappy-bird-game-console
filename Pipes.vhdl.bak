@@ -1,0 +1,138 @@
+LIBRARY IEEE;
+USE IEEE.STD_LOGIC_1164.all;
+USE  IEEE.STD_LOGIC_ARITH.all;
+USE  IEEE.STD_LOGIC_SIGNED.all;
+
+entity pipes is
+	port(
+		SIGNAL clk, vert_sync		        	: IN std_logic;
+		SIGNAL reset, pause						: IN std_logic;
+		SIGNAL hit_pipe							: IN std_logic;
+		SIGNAL pixel_row, pixel_column	  	: IN std_logic_vector(9 DOWNTO 0);
+		SIGNAL selected_mode               	: IN std_logic_vector(1 downto 0);
+		SIGNAL x_pos_1, x_pos_2 				: OUT std_logic_vector(10 DOWNTO 0);
+		SIGNAL topheight_1, bottomheight_1 	: OUT integer;
+	   SIGNAL topheight_2, bottomheight_2 	: OUT integer;
+		SIGNAL pipe_out 	                	: OUT std_logic	
+		);
+end pipes;
+
+architecture behaviour of pipes is 
+
+	component LFSR_Galios is 
+		port(   
+		Clk : IN std_logic;
+		output : OUT std_logic_vector(8 downto 0)
+	);	
+	end component LFSR_Galios; 
+	
+SIGNAL gap    				: integer   := 80;
+	
+SIGNAL pipe_width 		: std_logic_vector(9 DOWNTO 0) := CONV_STD_LOGIC_VECTOR(20,10); --Actually 2*20 = 40 pixels wide in total
+
+SIGNAL pipe_center_1    : integer range 100 to 356 := 250;			--LFSR produces output integer between 100-356
+SIGNAL pipe_center_2    : integer range 100 to 356 := 250;
+
+SIGNAL pipe1_top			: integer   := pipe_center_1 - gap;			--Determine the top and bottom coordinates of the both pipes using the pipe center and hap size
+SIGNAL pipe1_bottom 		: integer   := pipe_center_1 + gap;			--Therefore the gap between the top and bottom pipe is 2*70 = 140 pixels wide
+SIGNAL pipe2_top 			: integer   := pipe_center_2 - gap;
+SIGNAL pipe2_bottom 		: integer   := pipe_center_2 + gap;
+
+SIGNAL pipe_y_pos			: std_logic_vector(9 DOWNTO 0) := CONV_STD_LOGIC_VECTOR(0,10);
+
+SIGNAL pipe_x_pos_1		: std_logic_vector(10 DOWNTO 0) := CONV_STD_LOGIC_VECTOR(640,11);
+SIGNAL pipe_x_pos_2		: std_logic_vector(10 DOWNTO 0) := CONV_STD_LOGIC_VECTOR(940,11);  --940 = 640 + pipe_width + pipe_spacing (280 pixels) so pipe 2 trails by 300 pixels
+
+SIGNAL pipe_x_motion		: std_logic_vector(10 DOWNTO 0) := CONV_STD_LOGIC_VECTOR(2,11);	--Pipes move 2 pixel per vert_sync
+
+SIGNAL random_number		: std_logic_vector(8 downto 0) := CONV_STD_LOGIC_VECTOR(200, 9);
+
+BEGIN
+
+pipe_out <= '1' when 
+				((('0' & pipe_x_pos_1 <= '0' & pixel_column + pipe_width) and ('0' & pixel_column <= '0' & pipe_x_pos_1 + pipe_width))
+				and ((('0' & pipe_y_pos <= pixel_row) and ('0' & pixel_row <= pipe1_top)) 						--Top of pipe
+				or ((pipe1_bottom <= pixel_row) and ('0' & pixel_row <= CONV_STD_LOGIC_VECTOR(480,10)))))	--Bottom of pipe
+				
+				or
+				
+				((('0' & pipe_x_pos_2 <= '0' & pixel_column + pipe_width) and ('0' & pixel_column <= '0' & pipe_x_pos_2 + pipe_width))
+				and ((('0' & pipe_y_pos <= pixel_row) and ('0' & pixel_row <= pipe2_top)) 						--Top of pipe
+				or ((pipe2_bottom <= pixel_row) and ('0' & pixel_row <= CONV_STD_LOGIC_VECTOR(480,10)))))	--Bottom of pipe
+				
+				else
+				
+				'0';
+
+--LFSR used to generate random values for the gaps in the pipes.			
+random_num: LFSR_Galios port map(clk, random_number);
+
+Move_Pipes: process(vert_sync, reset, selected_mode, hit_pipe, pause)
+
+variable count : integer range 0 to 10 := 0; 	--Count the number of pipes passed to determine level
+variable level : integer range 1 to 5  := 1;		--Count the number of levels, the game has only 4 levels
+
+begin
+	if(reset = '1') then						--reset pipes to original state
+		pipe_x_pos_1 <= CONV_STD_LOGIC_VECTOR(640,11);
+		pipe_x_pos_2 <= CONV_STD_LOGIC_VECTOR(940,11);
+		pipe_x_motion <= CONV_STD_LOGIC_VECTOR(2,11);
+		count := 1;
+		level := 1;
+		pipe_center_1 <= 250;
+		pipe_center_2 <= 250;
+	elsif (hit_pipe = '1') then			--reset pipe x location if ball hits pipes
+		pipe_x_pos_1 <= CONV_STD_LOGIC_VECTOR(640,11);
+		pipe_x_pos_2 <= CONV_STD_LOGIC_VECTOR(940,11);
+	elsif(rising_edge(vert_sync) and pause = '0') then			--Move pipes once every vertical sync
+		if (selected_mode = "01") then 	-- training mode	
+		
+			pipe_x_pos_1 <= pipe_x_pos_1 - pipe_x_motion;		--Compute next pipe X position
+			pipe_x_pos_2 <= pipe_x_pos_2 - pipe_x_motion;
+		
+			if (pipe_x_pos_1 <= CONV_STD_LOGIC_VECTOR(0,11)) then
+				pipe_x_pos_1 <= CONV_STD_LOGIC_VECTOR(640+20,11); --640+20 ensure smooth pipe entry on-screen since pipe_width = 20
+				pipe_center_1 <= CONV_INTEGER(random_number);
+			end if;
+		
+			if (pipe_x_pos_2 <= CONV_STD_LOGIC_VECTOR(0,11)) then
+				pipe_x_pos_2 <= CONV_STD_LOGIC_VECTOR(640+20,11);
+				pipe_center_2 <= CONV_INTEGER(random_number);
+			end if;
+			
+		elsif (selected_mode = "10") then --regular mode	
+	
+			pipe_x_pos_1 <= pipe_x_pos_1 - pipe_x_motion;		--Compute next pipe X position
+			pipe_x_pos_2 <= pipe_x_pos_2 - pipe_x_motion;
+			
+			if (pipe_x_pos_1 <= CONV_STD_LOGIC_VECTOR(0,11)) then
+				pipe_x_pos_1 <= CONV_STD_LOGIC_VECTOR(640+20,11);
+				pipe_center_1 <= CONV_INTEGER(random_number);
+				count := count + 1;
+			end if;
+		
+			if (pipe_x_pos_2 <= CONV_STD_LOGIC_VECTOR(0,11)) then
+				pipe_x_pos_2 <= CONV_STD_LOGIC_VECTOR(640+20,11);
+				pipe_center_2 <= CONV_INTEGER(random_number);
+				count := count + 1;
+			end if;
+			
+			if (count = 10 and level < 4) then 			--if 10 pipes passed, level increases by 1 thus pipe travel speed increases by 2 pixel per vert_sync
+				count := 0;
+				pipe_x_motion <= pipe_x_motion + CONV_STD_LOGIC_VECTOR(2, 11);
+				level := level + 1;							--Only 4 levels of speed
+			end if;
+			
+		end if;
+	end if;
+
+end process Move_Pipes;
+
+topheight_1 <= pipe1_top;
+topheight_2 <= pipe2_top;
+bottomheight_1 <= pipe1_bottom;
+bottomheight_2 <= pipe2_bottom;
+x_pos_1 <= pipe_x_pos_1;
+x_pos_2 <= pipe_x_pos_2;	
+	
+end behaviour;

@@ -1,0 +1,295 @@
+--Bouncy ball
+
+LIBRARY IEEE;
+USE IEEE.STD_LOGIC_1164.all;
+USE  IEEE.STD_LOGIC_ARITH.all;
+USE  IEEE.STD_LOGIC_SIGNED.all;
+
+
+ENTITY bouncy_ball IS
+	PORT(
+		 SIGNAL pb1, pb2, clk, vert_sync	      		: IN std_logic;
+		 SIGNAL reset, pause    			      		: IN std_logic;
+		 SIGNAL pixel_row, pixel_column	      		: IN std_logic_vector(9 DOWNTO 0);
+		 SIGNAL selected_mode                 			: IN std_logic_vector(1 downto 0);
+		 SIGNAL score_hundreds_out, score_tens_out, score_ones_out	: OUT std_logic_vector(5 downto 0);
+		 SIGNAL game_over										: OUT std_logic := '0';
+		 SIGNAL text_on, ball_on, pipe_on 				: OUT std_logic;
+		 SIGNAL ball_colour									: OUT std_logic_vector(11 downto 0)
+		 );
+END bouncy_ball;
+
+architecture behavior of bouncy_ball is
+
+SIGNAL size 					: std_logic_vector(9 DOWNTO 0);  
+SIGNAL ball_y_pos				: std_logic_vector(9 DOWNTO 0);
+SiGNAL ball_x_pos				: std_logic_vector(10 DOWNTO 0);
+SIGNAL ball_y_motion			: std_logic_vector(9 DOWNTO 0) := -CONV_STD_LOGIC_VECTOR(5,10);
+
+COMPONENT char_rom is
+	PORT(
+		character_address		:	IN STD_LOGIC_VECTOR (5 DOWNTO 0);
+		font_row, font_col	:	IN STD_LOGIC_VECTOR (2 DOWNTO 0);
+		clock						: 	IN STD_LOGIC ;
+		rom_mux_output			:	OUT STD_LOGIC
+		);
+end COMPONENT char_rom;
+
+COMPONENT char_rom_4s is
+	PORT(
+		character_address		:	IN STD_LOGIC_VECTOR (5 DOWNTO 0);
+		font_row, font_col	:	IN STD_LOGIC_VECTOR (2 DOWNTO 0);
+		clock						: 	IN STD_LOGIC ;
+		rom_mux_output			:	OUT STD_LOGIC
+		);
+end COMPONENT char_rom_4s;
+
+COMPONENT pipes is
+	port(
+		SIGNAL clk, vert_sync		        	: IN std_logic;
+		SIGNAL reset, pause						: IN std_logic;
+		SIGNAL hit_pipe							: IN std_logic;
+		SIGNAL pixel_row, pixel_column	  	: IN std_logic_vector(9 DOWNTO 0);
+		SIGNAL selected_mode               	: IN std_logic_vector(1 downto 0);
+		SIGNAL x_pos_1, x_pos_2 				: OUT std_logic_vector(10 DOWNTO 0);
+		SIGNAL topheight_1, bottomheight_1 	: OUT integer;
+	   SIGNAL topheight_2, bottomheight_2 	: OUT integer;
+		SIGNAL pipe_out 	                	: OUT std_logic	
+		);
+end COMPONENT pipes;
+
+COMPONENT Flappybird_rom 
+	port (
+		pixel_x, pixel_y 							: in std_logic_vector (4 downto 0);
+		clock											: in std_logic  := '1';
+		q												: out std_logic_vector (11 downto 0)
+		);
+end COMPONENT Flappybird_rom;
+
+SIGNAL score_text 			: std_logic_vector(5 downto 0); 	--Display "score" and "lives" and "level" on-screen
+SIGNAL lives_text 			: std_logic_vector(5 downto 0); 
+SIGNAL level_text 			: std_logic_vector(5 downto 0); 
+SIGNAL score_text_out 		: STD_LOGIC := '0';
+SIGNAL level_text_out 		: STD_LOGIC := '0';
+SIGNAL lives_text_out 		: STD_LOGIC := '0';
+
+SIGNAL score_hundreds 		: std_logic_vector(5 downto 0) := "110000"; --Display number of lives and score and level
+SIGNAL score_tens 			: std_logic_vector(5 downto 0) := "110000";
+SIGNAL score_ones 			: std_logic_vector(5 downto 0) := "110000";
+SIGNAL lives  					: std_logic_vector(5 downto 0) := "110011";
+SIGNAL level_number			: std_logic_vector(5 downto 0) := "110001";
+
+SIGNAL pipe_x_pos_1 			: std_logic_vector(10 DOWNTO 0);
+SIGNAL pipe_x_pos_2 			: std_logic_vector(10 DOWNTO 0);
+
+SIGNAL topheight_1, bottomheight_1 : integer range 0 to 480;
+SIGNAL topheight_2, bottomheight_2 : integer range 0 to 480;
+
+SIGNAL hit_pipe 				: std_logic := '0';
+
+SIGNAL color_int				: std_logic_vector (11 downto 0);
+SIGNAL rom_x,rom_y 			: std_logic_vector (4 downto 0);
+
+CONSTANT bird_height : std_logic_vector(10 downto 0) := CONV_STD_LOGIC_VECTOR(32,11);
+CONSTANT bird_width :  std_logic_vector(10 downto 0) := CONV_STD_LOGIC_VECTOR(32,11);
+
+BEGIN           
+
+--Ball Parameters
+ball_x_pos <= CONV_STD_LOGIC_VECTOR(250,11); 	--ball_x_pos and ball_y_pos show the (x,y) for the centre of ball
+
+
+-- determines when and where to display the Ball
+	ball_on <= '1' when ('0' & pixel_column) >= ball_x_pos and ('0' & pixel_column) < ball_x_pos + bird_width
+                and ('0' & pixel_row) >= ball_y_pos and ('0' & pixel_row) < ball_y_pos + bird_height
+				and color_int /= "010001111100"
+            else '0';
+
+--bird colour 
+	bird_colour : Flappybird_rom port map (
+		pixel_x=> rom_x,
+		pixel_y=> rom_y,
+		clock => clk,
+		q=>color_int
+	);			
+			
+	rom_x <= std_logic_vector(pixel_column(4 downto 0) - ball_x_pos(4 downto 0) + "00010");
+	rom_y <= std_logic_vector(pixel_row(4 downto 0) - ball_y_pos(4 downto 0));
+	ball_colour <= color_int;
+			
+-- determines when and where to display the text
+text_on <= '1' when (score_text_out = '1' and pixel_column <= CONV_STD_LOGIC_VECTOR(157,10) and pixel_column >= CONV_STD_LOGIC_VECTOR(14,10) 
+					and pixel_row <= CONV_STD_LOGIC_VECTOR(430,10) and pixel_row >= CONV_STD_LOGIC_VECTOR(414,10)) or
+					
+					(lives_text_out = '1' and pixel_column <= CONV_STD_LOGIC_VECTOR(127,10) and pixel_column >= CONV_STD_LOGIC_VECTOR(14,10) 
+					and pixel_row <= CONV_STD_LOGIC_VECTOR(462,10) and pixel_row >= CONV_STD_LOGIC_VECTOR(446,10)) or
+					
+					(level_text_out = '1' and pixel_column <= CONV_STD_LOGIC_VECTOR(127,10) and pixel_column >= CONV_STD_LOGIC_VECTOR(14,10) 
+					and pixel_row <= CONV_STD_LOGIC_VECTOR(446,10) and pixel_row >= CONV_STD_LOGIC_VECTOR(430,10))
+					else 
+					'0';
+
+-- prints "SCORE:s" where s is the score value
+level_text <= 	CONV_STD_LOGIC_VECTOR(12,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(32,10) else 		--"L"
+				CONV_STD_LOGIC_VECTOR(5,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(48,10) else		--"E"
+				CONV_STD_LOGIC_VECTOR(22,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(64,10) else 		--"V"
+				CONV_STD_LOGIC_VECTOR(5,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(80,10) else 		--"E"
+				CONV_STD_LOGIC_VECTOR(12,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(96,10) else 		--"L"
+				CONV_STD_LOGIC_VECTOR(45,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(112,10) else 	--"-"
+				level_number when pixel_column <= CONV_STD_LOGIC_VECTOR(128,10) else				--Display level number
+				"101111";
+				
+score_text <= 	CONV_STD_LOGIC_VECTOR(19,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(32,10) else 		--"S"
+				CONV_STD_LOGIC_VECTOR(3,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(48,10) else		--"C"
+				CONV_STD_LOGIC_VECTOR(15,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(64,10) else 		--"O"
+				CONV_STD_LOGIC_VECTOR(18,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(80,10) else 		--"R"
+				CONV_STD_LOGIC_VECTOR(5,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(96,10) else 		--"E"
+				CONV_STD_LOGIC_VECTOR(45,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(112,10) else 	--"-"
+				score_hundreds when pixel_column <= CONV_STD_LOGIC_VECTOR(128,10) else			--Display score number
+				score_tens when pixel_column <= CONV_STD_LOGIC_VECTOR(144,10) else
+				score_ones when pixel_column <= CONV_STD_LOGIC_VECTOR(160,10) else
+				"101111";
+				
+lives_text <= 	CONV_STD_LOGIC_VECTOR(12,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(32,10) else 		--"L"
+				CONV_STD_LOGIC_VECTOR(9,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(48,10) else 		--"I"
+				CONV_STD_LOGIC_VECTOR(22,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(64,10) else 		--"V"
+				CONV_STD_LOGIC_VECTOR(5,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(80,10) else 		--"E"
+				CONV_STD_LOGIC_VECTOR(19,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(96,10) else 		--"S"
+				CONV_STD_LOGIC_VECTOR(45,6) when pixel_column <= CONV_STD_LOGIC_VECTOR(112,10) else 	--"-"
+				lives when pixel_column <= CONV_STD_LOGIC_VECTOR(128,10) else						--Display lives nummber
+				"101111";
+
+--Extract one bit from rom_data
+textscore: char_rom port map (score_text, pixel_row(3 downto 1), pixel_column(3 downto 1), clk, score_text_out); --Font size 16x16
+textlives: char_rom port map (lives_text, pixel_row(3 downto 1), pixel_column(3 downto 1), clk, lives_text_out);
+textlevel: char_rom_4s port map (level_text, pixel_row(3 downto 1), pixel_column(3 downto 1), clk, level_text_out);
+
+--Create pipes
+pipe: pipes port map (clk, vert_sync, reset, pause, hit_pipe, pixel_row, pixel_column, selected_mode, pipe_x_pos_1, 
+                      pipe_x_pos_2, topheight_1, bottomheight_1, topheight_2, bottomheight_2, pipe_on);
+		
+Move_Ball: process (vert_sync, reset, pause) 
+variable flag 				: std_logic := '0';				-- determines wheter or not ball is allowed to jump
+variable counter 			: integer range 0 to 5 := 0; 	-- allows fluid movement of the ball
+variable counter2 		: integer range 0 to 5 := 0; 
+variable score_check 	: std_logic := '1';
+variable life				: integer range 0 to 10 := 3;
+variable score_total		: integer range 0 to 5 := 0;
+variable count				: integer range 0 to 2 := 0;
+
+begin
+	if(reset = '1') then
+		score_hundreds <= "110000";		--"0"
+		score_tens <= "110000";				--"0"
+		score_ones <= "110000";				--"0"
+		lives  <= "110011";					--"3"
+		level_number <= "110001";				--"1"
+		score_total := 0;
+		ball_y_pos <= CONV_STD_LOGIC_VECTOR(150, 10);	--Inital position of ball
+		ball_y_motion <= -CONV_STD_LOGIC_VECTOR(5,10);  --Initially goes up by 5 pixels per vert_sync
+		game_over <= '0';
+		life := 3;
+		hit_pipe <= '0';
+	elsif(rising_edge(vert_sync) and pause = '0') then  
+		-- Move ball once every vertical sync
+		if (selected_mode = "01" or selected_mode = "10") then	--Both training and game mode		
+
+			--Ball accelerates downwards faster by 3 after counter after 5 vert_sync
+			if(counter2 = 5) then				
+				ball_y_motion <= ball_y_motion + CONV_STD_LOGIC_VECTOR(3,10); 
+			end if;			
+			counter2 := counter2 + 1;			
+
+			-- makes ball jump once per click
+			if(pb1 = '1' and counter < 5) then
+				flag := '1';				--Create flag to jump once
+			end if;
+				
+			if(flag = '1') then
+				ball_y_motion <= -CONV_STD_LOGIC_VECTOR(6,10);
+				counter := counter + 1;
+				if(counter = 5) then		--Ball allowed to jump only 6x5 = 30 pixels up
+					flag := '0';
+				end if;
+			end if;
+				
+			if (pb1 = '0' and flag = '0') then
+				counter := 0;				--After ball finished travelling up, reset "counter" for next click to travel up again.  
+			end if;
+
+			--check if ball hits pipes, pipe width is 20
+			if ((((ball_x_pos + bird_width) >= (pipe_x_pos_1 - 20) and (ball_x_pos) <= (pipe_x_pos_1 + 20)) and	--Checking if the bird does not hit the sides of the pipe
+				 (ball_y_pos <= topheight_1 or (ball_y_pos + bird_height) >= bottomheight_1)) or							--Checking if the bird is in the middle of the pipe
+				(((ball_x_pos + bird_width) >= (pipe_x_pos_2 - 20) and (ball_x_pos) <= (pipe_x_pos_2 + 20)) and
+				 (ball_y_pos <= topheight_2 or (ball_y_pos + bird_height) >= bottomheight_2))) then
+				hit_pipe <= '1';
+			end if;
+			
+			--If ball hits floor then game over
+			if (ball_y_pos >= CONV_STD_LOGIC_VECTOR(464, 10)) then
+				game_over <= '1';
+			end if;
+			
+			--updates the y position of the ball
+			ball_y_pos <= ball_y_pos + ball_y_motion;				
+			
+			--If pipe hit, check if any lives left to continue game, otherwise end game
+			if (hit_pipe = '1') then		
+				if (life > 0) then
+					ball_y_pos <= CONV_STD_LOGIC_VECTOR(150, 10);		--Reset ball position	
+					ball_y_motion <= -CONV_STD_LOGIC_VECTOR(5,10);		--Reinitalise ball fall speed. 
+					life := life - 1;
+					lives <= lives - 1;
+					hit_pipe <= '0';
+				else 
+					game_over <= '1';
+				end if;
+			end if;
+			
+			if((ball_x_pos <= pipe_x_pos_1 and ball_x_pos <= pipe_x_pos_2) and score_check = '0') then
+				score_check := '1';			--Create flag to update score once
+			end if;
+			
+			if (selected_mode = "10" and score_total = 5) then
+				score_total := 0;				--If player reaches score of 5, gift 1 life
+				count := count + 1;
+				if (life < 10) then			--Max 10 lives
+					life := life + 1;
+					lives <= lives + 1;
+				end if;
+			end if;
+			
+			if (selected_mode = "10" and count = 2) then
+				count := 0;						--If 10 pipes pass, levels increases by 1
+				if (level_number <= 4) then	--Only 4 levels
+					level_number <= level_number + 1;
+				end if;
+			end if;
+			
+			--Updates the score to be displayed
+			if ((ball_x_pos >= pipe_x_pos_1 + CONV_STD_LOGIC_VECTOR(20,11) or ball_x_pos >= pipe_x_pos_2 + CONV_STD_LOGIC_VECTOR(20,11)) and score_check = '1') then
+				score_total := score_total + 1;
+				score_ones <= score_ones + 1;
+				if(score_ones = "111001") then				--"9"
+					score_ones <= "110000";						--"0"
+					score_tens <= score_tens + 1;
+					if(score_tens = "111001") then			--"9"
+						score_tens <= "110000";					--"0"
+						score_hundreds <= score_hundreds + 1;
+						if(score_hundreds = "111001") then	--"9"
+							score_hundreds <= "110000";		--"0"
+						end if;
+					end if;
+				end if;
+				score_check := '0';
+			end if;
+		end if;
+	end if;
+end process Move_Ball;
+
+score_hundreds_out <= score_hundreds;
+score_tens_out <= score_tens;
+score_ones_out <= score_ones;
+
+END behavior;
+
